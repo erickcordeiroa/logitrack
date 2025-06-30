@@ -1,18 +1,69 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapComponent } from "@/components/map"
 import { Package, Clock, TrendingUp, AlertTriangle, CheckCircle, Navigation, Users, Bell, Route } from "lucide-react"
-
-const metrics = {
-  totalDeliveries: 342,
-  activeRoutes: 8,
-  avgDeliveryTime: "28 min",
-  onTimeRate: "94%",
-}
+import ApiService, { DashboardStats, EntregadorLocalizacao } from "@/lib/apiService"
 
 export default function Dashboard() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [entregadores, setEntregadores] = useState<EntregadorLocalizacao[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const [statsData, entregadoresData] = await Promise.all([
+          ApiService.getDashboardStats(),
+          ApiService.getEntregadoresLocalizacao()
+        ])
+        
+        setStats(statsData)
+        setEntregadores(entregadoresData)
+        setError(null)
+      } catch (err) {
+        console.error('Erro ao carregar dados do dashboard:', err)
+        setError('Erro ao carregar dados. Usando dados de exemplo.')
+        // Usar dados mock em caso de erro
+        setStats({
+          entregadores_ativos: 12,
+          rotas_hoje: 8,
+          entregas_pendentes: 24,
+          entregas_entregues: 156
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+
+    // Atualizar dados a cada 30 segundos
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/3 mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+          <div className="h-96 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -22,12 +73,23 @@ export default function Dashboard() {
           <p className="text-gray-600">Visão geral do sistema de logística</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="bg-green-100 text-green-800">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-            Sistema Online
+          <Badge variant="secondary" className={`${error ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+            <div className={`w-2 h-2 ${error ? 'bg-yellow-500' : 'bg-green-500'} rounded-full mr-2 animate-pulse`}></div>
+            {error ? 'Modo Offline' : 'Sistema Online'}
           </Badge>
         </div>
       </div>
+
+      {error && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+              <span className="text-sm text-yellow-800">{error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -35,11 +97,11 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total de Entregas</p>
-                <p className="text-2xl font-bold">{metrics.totalDeliveries}</p>
-                <p className="text-xs text-green-600 mt-1">+12% vs ontem</p>
+                <p className="text-sm font-medium text-gray-600">Entregadores Ativos</p>
+                <p className="text-2xl font-bold">{stats?.entregadores_ativos || 0}</p>
+                <p className="text-xs text-green-600 mt-1">Em operação</p>
               </div>
-              <Package className="h-8 w-8 text-blue-600" />
+              <Users className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -48,8 +110,8 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Rotas Ativas</p>
-                <p className="text-2xl font-bold">{metrics.activeRoutes}</p>
+                <p className="text-sm font-medium text-gray-600">Rotas Hoje</p>
+                <p className="text-2xl font-bold">{stats?.rotas_hoje || 0}</p>
                 <p className="text-xs text-blue-600 mt-1">Em tempo real</p>
               </div>
               <Route className="h-8 w-8 text-green-600" />
@@ -61,11 +123,11 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Tempo Médio</p>
-                <p className="text-2xl font-bold">{metrics.avgDeliveryTime}</p>
-                <p className="text-xs text-orange-600 mt-1">-3 min vs média</p>
+                <p className="text-sm font-medium text-gray-600">Entregas Pendentes</p>
+                <p className="text-2xl font-bold">{stats?.entregas_pendentes || 0}</p>
+                <p className="text-xs text-orange-600 mt-1">Aguardando</p>
               </div>
-              <Clock className="h-8 w-8 text-orange-600" />
+              <Package className="h-8 w-8 text-orange-600" />
             </div>
           </CardContent>
         </Card>
@@ -74,11 +136,11 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Taxa de Pontualidade</p>
-                <p className="text-2xl font-bold">{metrics.onTimeRate}</p>
-                <p className="text-xs text-purple-600 mt-1">Meta: 95%</p>
+                <p className="text-sm font-medium text-gray-600">Entregas Concluídas</p>
+                <p className="text-2xl font-bold">{stats?.entregas_entregues || 0}</p>
+                <p className="text-xs text-purple-600 mt-1">Hoje</p>
               </div>
-              <TrendingUp className="h-8 w-8 text-purple-600" />
+              <CheckCircle className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -87,62 +149,45 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Mapa */}
         <div className="lg:col-span-2">
-          <MapComponent />
+          <MapComponent entregadores={entregadores} />
         </div>
 
-        {/* Alertas e Notificações */}
+        {/* Entregadores Ativos */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Alertas Recentes
+              <Navigation className="h-5 w-5" />
+              Entregadores Ativos
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
-              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-red-800">Atraso Crítico</p>
-                <p className="text-sm text-red-600">Pedido PED001 - 15 min de atraso</p>
-                <p className="text-xs text-red-500 mt-1">há 2 minutos</p>
+          <CardContent className="space-y-3">
+            {entregadores.length > 0 ? (
+              entregadores.slice(0, 5).map((entregador) => (
+                <div key={entregador.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-sm">{entregador.nome}</p>
+                    <p className="text-xs text-gray-600">{entregador.veiculo_tipo}</p>
+                  </div>
+                  <Badge 
+                    variant="secondary" 
+                    className={`text-xs ${
+                      entregador.status === 'online' ? 'bg-green-100 text-green-800' :
+                      entregador.status === 'em_entrega' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {entregador.status === 'online' ? 'Online' :
+                     entregador.status === 'em_entrega' ? 'Em Entrega' :
+                     entregador.status === 'offline' ? 'Offline' : 'Inativo'}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Nenhum entregador ativo</p>
               </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-yellow-800">Trânsito Intenso</p>
-                <p className="text-sm text-yellow-600">Rota Centro - Zona Sul congestionada</p>
-                <p className="text-xs text-yellow-500 mt-1">há 5 minutos</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-green-800">Entrega Concluída</p>
-                <p className="text-sm text-green-600">Pedido PED003 entregue com sucesso</p>
-                <p className="text-xs text-green-500 mt-1">há 8 minutos</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <Navigation className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-blue-800">Rota Otimizada</p>
-                <p className="text-sm text-blue-600">Nova rota calculada para João Silva</p>
-                <p className="text-xs text-blue-500 mt-1">há 12 minutos</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <Users className="h-5 w-5 text-gray-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-gray-800">Entregador Disponível</p>
-                <p className="text-sm text-gray-600">Maria Santos aguardando pedidos</p>
-                <p className="text-xs text-gray-500 mt-1">há 15 minutos</p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -157,45 +202,48 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Concluídas</span>
-                <span className="font-medium">89</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Em andamento</span>
-                <span className="font-medium">23</span>
+                <span className="font-medium">{stats?.entregas_entregues || 0}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Pendentes</span>
-                <span className="font-medium">44</span>
+                <span className="font-medium">{stats?.entregas_pendentes || 0}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total</span>
+                <span className="font-medium">{(stats?.entregas_entregues || 0) + (stats?.entregas_pendentes || 0)}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                <div className="bg-green-600 h-2 rounded-full" style={{ width: "57%" }}></div>
+                <div 
+                  className="bg-green-600 h-2 rounded-full" 
+                  style={{ 
+                    width: `${stats ? ((stats.entregas_entregues / (stats.entregas_entregues + stats.entregas_pendentes)) * 100) : 0}%` 
+                  }}
+                ></div>
               </div>
-              <p className="text-xs text-gray-500 text-center">57% concluído</p>
+              <p className="text-xs text-gray-500 text-center">
+                {stats ? Math.round((stats.entregas_entregues / (stats.entregas_entregues + stats.entregas_pendentes)) * 100) : 0}% concluído
+              </p>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Entregadores Ativos</CardTitle>
+            <CardTitle className="text-lg">Status dos Entregadores</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Disponíveis</span>
-                <span className="font-medium text-green-600">8</span>
+                <span className="text-gray-600">Ativos</span>
+                <span className="font-medium">{stats?.entregadores_ativos || 0}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Em rota</span>
-                <span className="font-medium text-blue-600">15</span>
+                <span className="text-gray-600">Online</span>
+                <span className="font-medium">{entregadores.filter(e => e.status === 'online').length}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Offline</span>
-                <span className="font-medium text-gray-600">3</span>
-              </div>
-              <div className="mt-3 text-center">
-                <span className="text-2xl font-bold">26</span>
-                <p className="text-xs text-gray-500">Total de entregadores</p>
+                <span className="text-gray-600">Em Entrega</span>
+                <span className="font-medium">{entregadores.filter(e => e.status === 'em_entrega').length}</span>
               </div>
             </div>
           </CardContent>
@@ -203,36 +251,21 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Eficiência</CardTitle>
+            <CardTitle className="text-lg">Rotas Hoje</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Pontualidade</span>
-                  <span className="font-medium">94%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-green-600 h-2 rounded-full" style={{ width: "94%" }}></div>
-                </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total</span>
+                <span className="font-medium">{stats?.rotas_hoje || 0}</span>
               </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Satisfação</span>
-                  <span className="font-medium">4.8/5</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: "96%" }}></div>
-                </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Em Andamento</span>
+                <span className="font-medium">-</span>
               </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Otimização</span>
-                  <span className="font-medium">87%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: "87%" }}></div>
-                </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Concluídas</span>
+                <span className="font-medium">-</span>
               </div>
             </div>
           </CardContent>
@@ -241,3 +274,4 @@ export default function Dashboard() {
     </div>
   )
 }
+            

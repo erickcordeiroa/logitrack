@@ -1,10 +1,11 @@
-import axios from 'axios'
+import ApiService, { Rota, Entrega } from './apiService'
 
 export type Stop = {
   lat: number
   lng: number
   status: 'completed' | 'current' | 'pending'
   order: number
+  entrega?: Entrega
 }
 
 export type Route = {
@@ -17,12 +18,61 @@ export type Route = {
   currentStop: number | null
   estimatedCompletion: string
   stops: Stop[]
+  rota?: Rota
 }
 
-// MOCK LOCAL PARA MVP
+// Função para converter dados da API para o formato usado no frontend
+function convertRotaToRoute(rota: Rota): Route {
+  const stops: Stop[] = rota.entregas?.map((entrega, index) => ({
+    lat: entrega.destino_latitude,
+    lng: entrega.destino_longitude,
+    status: entrega.status === 'entregue' ? 'completed' : 
+            entrega.status === 'em_transito' ? 'current' : 'pending',
+    order: entrega.ordem_na_rota,
+    entrega
+  })) || []
+
+  const currentStopIndex = stops.findIndex(stop => stop.status === 'current')
+  
+  return {
+    id: rota.id.toString(),
+    deliverer: rota.entregador?.nome || 'Sem entregador',
+    status: rota.status === 'em_andamento' ? 'in_progress' : rota.status,
+    hasProblem: false, // Pode ser calculado baseado em atrasos ou outras métricas
+    totalDeliveries: rota.entregas?.length || 0,
+    completedDeliveries: rota.entregas_concluidas,
+    currentStop: currentStopIndex >= 0 ? currentStopIndex : null,
+    estimatedCompletion: rota.hora_fim || '18:00', // Pode ser calculado dinamicamente
+    stops,
+    rota
+  }
+}
+
+// Função principal para buscar rotas - agora usa a API real
 export async function getRoutes(): Promise<Route[]> {
-  // Simula um delay de rede
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  try {
+    const rotas = await ApiService.getRotas()
+    return rotas.map(convertRotaToRoute)
+  } catch (error) {
+    console.error('Erro ao buscar rotas:', error)
+    // Fallback para dados mock em caso de erro
+    return getMockRoutes()
+  }
+}
+
+// Buscar uma rota específica
+export async function getRoute(id: string): Promise<Route | null> {
+  try {
+    const rota = await ApiService.getRota(parseInt(id))
+    return convertRotaToRoute(rota)
+  } catch (error) {
+    console.error('Erro ao buscar rota:', error)
+    return null
+  }
+}
+
+// Função para dados mock (mantida como fallback)
+function getMockRoutes(): Route[] {
   return [
     {
       id: "ROTA001",
@@ -48,7 +98,7 @@ export async function getRoutes(): Promise<Route[]> {
       id: "ROTA002",
       deliverer: "Maria Santos",
       status: "in_progress",
-      hasProblem: true, // Este entregador terá um problema
+      hasProblem: true,
       totalDeliveries: 5,
       completedDeliveries: 2,
       currentStop: 1,

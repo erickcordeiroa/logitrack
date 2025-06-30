@@ -5,7 +5,7 @@ export interface Delivery {
   address: string;
   latitude: number;
   longitude: number;
-  status: 'pending' | 'in_progress' | 'delivered' | 'failed';
+  status: 'pending' | 'collected' | 'in_transit' | 'delivered' | 'cancelled';
   estimatedTime: string;
   items: DeliveryItem[];
   notes?: string;
@@ -23,11 +23,21 @@ export interface DeliveryItem {
 
 export interface Route {
   id: string;
-  deliveries: Delivery[];
-  totalDistance: number;
-  estimatedDuration: number;
-  optimized: boolean;
-  startLocation: Coordinates;
+  driverId: string;
+  status: 'pending' | 'active' | 'completed' | 'cancelled';
+  totalStops: number;
+  completedStops: number;
+  estimatedCompletion: string;
+  stops: RouteStop[];
+}
+
+export interface RouteStop {
+  id: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  completed: boolean;
+  estimatedTime: string;
 }
 
 export interface Coordinates {

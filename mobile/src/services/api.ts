@@ -1,14 +1,15 @@
 import axios from 'axios';
 import { Delivery, Route, DeliveryDriver, Coordinates } from '../types';
 
-// Configuração base da API - será necessário ajustar quando o backend Laravel estiver pronto
-const API_BASE_URL = __DEV__ ? 'http://localhost:8000/api' : 'https://your-api-domain.com/api';
+// Configuração base da API
+const API_BASE_URL = __DEV__ ? 'http://192.168.1.100:8000/api/v1' : 'https://your-api-domain.com/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
 
@@ -27,12 +28,39 @@ api.interceptors.request.use(
   }
 );
 
+// Interceptor para tratar respostas da API Laravel
+api.interceptors.response.use(
+  (response) => {
+    // Se a resposta tem success: true, retorna só os dados
+    if (response.data?.success) {
+      return { ...response, data: response.data.data };
+    }
+    return response;
+  },
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
 export class ApiService {
   // Buscar entregas pendentes para o entregador
   static async getDeliveries(driverId: string): Promise<Delivery[]> {
     try {
-      const response = await api.get(`/drivers/${driverId}/deliveries`);
-      return response.data;
+      const response = await api.get(`/entregadores/${driverId}`);
+      const entregador = response.data;
+      
+      // Buscar entregas de todas as rotas do entregador
+      const entregas: any[] = [];
+      if (entregador.rotas) {
+        entregador.rotas.forEach((rota: any) => {
+          if (rota.entregas) {
+            entregas.push(...rota.entregas);
+          }
+        });
+      }
+      
+      return entregas.map(this.convertEntregaToDelivery);
     } catch (error) {
       console.error('Erro ao buscar entregas:', error);
       // Retorna dados mock para desenvolvimento
@@ -43,8 +71,8 @@ export class ApiService {
   // Buscar detalhes de uma entrega específica
   static async getDeliveryDetails(deliveryId: string): Promise<Delivery> {
     try {
-      const response = await api.get(`/deliveries/${deliveryId}`);
-      return response.data;
+      const response = await api.get(`/entregas/${deliveryId}`);
+      return this.convertEntregaToDelivery(response.data);
     } catch (error) {
       console.error('Erro ao buscar detalhes da entrega:', error);
       throw error;
@@ -58,11 +86,22 @@ export class ApiService {
     location?: Coordinates
   ): Promise<void> {
     try {
-      await api.patch(`/deliveries/${deliveryId}/status`, {
-        status,
-        location,
-        timestamp: new Date().toISOString(),
-      });
+      let endpoint: string;
+      switch (status) {
+        case 'collected':
+          endpoint = `/entregas/${deliveryId}/coletar`;
+          break;
+        case 'in_transit':
+          endpoint = `/entregas/${deliveryId}/transito`;
+          break;
+        case 'delivered':
+          endpoint = `/entregas/${deliveryId}/entregar`;
+          break;
+        default:
+          throw new Error(`Status ${status} não suportado`);
+      }
+      
+      await api.post(endpoint, { location });
     } catch (error) {
       console.error('Erro ao atualizar status da entrega:', error);
       throw error;
@@ -75,12 +114,19 @@ export class ApiService {
     currentLocation: Coordinates
   ): Promise<Route> {
     try {
-      const response = await api.post(`/drivers/${driverId}/optimize-route`, {
-        currentLocation,
-      });
-      return response.data;
+      const response = await api.get(`/entregadores/${driverId}`);
+      const entregador = response.data;
+      
+      // Buscar rota ativa do entregador
+      const rotaAtiva = entregador.rotas?.find((rota: any) => rota.status === 'em_andamento');
+      
+      if (rotaAtiva) {
+        return this.convertRotaToRoute(rotaAtiva);
+      }
+      
+      throw new Error('Nenhuma rota ativa encontrada');
     } catch (error) {
-      console.error('Erro ao otimizar rota:', error);
+      console.error('Erro ao buscar rota:', error);
       // Retorna rota mock para desenvolvimento
       return this.getMockRoute();
     }
@@ -92,10 +138,72 @@ export class ApiService {
     location: Coordinates
   ): Promise<void> {
     try {
-      await api.post(`/drivers/${driverId}/location`, location);
+      await api.post(`/entregadores/${driverId}/location`, {
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
     } catch (error) {
       console.error('Erro ao atualizar localização:', error);
     }
+  }
+
+  // Função para converter dados da API Laravel para o formato do app
+  private static convertEntregaToDelivery(entrega: any): Delivery {
+    return {
+      id: entrega.id.toString(),
+      customerName: entrega.cliente_nome,
+      customerPhone: entrega.cliente_telefone || '',
+      address: entrega.endereco_destino,
+      latitude: entrega.destino_latitude,
+      longitude: entrega.destino_longitude,
+      status: this.convertStatusToDeliveryStatus(entrega.status),
+      estimatedTime: '25 min', // Pode ser calculado dinamicamente
+      items: [
+        {
+          id: '1',
+          name: 'Produto',
+          quantity: 1,
+          description: entrega.observacoes || 'Sem descrição',
+        },
+      ],
+      notes: entrega.observacoes || '',
+      priority: 'medium' as const,
+      createdAt: entrega.created_at,
+      updatedAt: entrega.updated_at,
+    };
+  }
+
+  private static convertStatusToDeliveryStatus(status: string): Delivery['status'] {
+    const statusMap: Record<string, Delivery['status']> = {
+      'pendente': 'pending',
+      'coletada': 'collected',
+      'em_transito': 'in_transit',
+      'entregue': 'delivered',
+      'cancelada': 'cancelled',
+    };
+    
+    return statusMap[status] || 'pending';
+  }
+
+  private static convertRotaToRoute(rota: any): Route {
+    const stops = rota.entregas?.map((entrega: any) => ({
+      id: entrega.id.toString(),
+      address: entrega.endereco_destino,
+      latitude: entrega.destino_latitude,
+      longitude: entrega.destino_longitude,
+      completed: entrega.status === 'entregue',
+      estimatedTime: '15 min',
+    })) || [];
+
+    return {
+      id: rota.id.toString(),
+      driverId: rota.entregador_id?.toString() || '',
+      status: rota.status === 'em_andamento' ? 'active' : 'pending',
+      totalStops: stops.length,
+      completedStops: stops.filter((stop: any) => stop.completed).length,
+      estimatedCompletion: rota.hora_fim || '18:00',
+      stops,
+    };
   }
 
   // Dados mock para desenvolvimento - Cidade de Registro-SP
