@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "LogiTrack Entregador",
+    "slug": "logitrack-entregador",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#007AFF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.logitrack.entregador",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Este app precisa acessar sua localização para mostrar sua posição no mapa e calcular rotas para as entregas.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Este app precisa acessar sua localização para rastrear suas entregas e otimizar rotas.",
+        "NSLocationAlwaysUsageDescription": "Este app precisa acessar sua localização para rastrear suas entregas e otimizar rotas."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#007AFF"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.logitrack.entregador",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Este app precisa acessar sua localização para mostrar sua posição no mapa e calcular rotas para as entregas.",
+          "locationAlwaysPermission": "Este app precisa acessar sua localização para rastrear suas entregas e otimizar rotas.",
+          "locationWhenInUsePermission": "Este app precisa acessar sua localização para mostrar sua posição no mapa e calcular rotas para as entregas."
+        }
+      ]
+    ]
+  }
+}
